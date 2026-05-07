@@ -3,11 +3,13 @@ set -e
 
 MODE="local"
 WITH_CLAUDE_MD=false
+WITH_HOOK=true
 
 for arg in "$@"; do
   case "$arg" in
     global) MODE="global" ;;
     --claude-md) WITH_CLAUDE_MD=true ;;
+    --no-hook) WITH_HOOK=false ;;
   esac
 done
 
@@ -187,9 +189,12 @@ fi
 # Optionally inject documentation rules into CLAUDE.md
 if [ "$WITH_CLAUDE_MD" = true ]; then
   MARKER="<!-- cairn:start -->"
+  AETHER_MARKER="<!-- aether:start -->"
 
   if [ -f "$CLAUDE_FILE" ] && grep -q "$MARKER" "$CLAUDE_FILE"; then
     echo "✓ $CLAUDE_FILE already contains cairn section — skipped"
+  elif [ -f "$CLAUDE_FILE" ] && grep -q "$AETHER_MARKER" "$CLAUDE_FILE"; then
+    echo "✓ $CLAUDE_FILE managed by aether — cairn section already included, skipped"
   else
     TEMPLATE=$(curl -fsSL \
       "https://raw.githubusercontent.com/ValentinFigue/cairn/main/templates/CLAUDE.md")
@@ -217,40 +222,42 @@ if [ "$MODE" = "global" ]; then
     echo "  Note: add $CLI_DIR to your PATH to use the 'cairn' command"
   fi
 
-  # Install enforce-cairn hook (PreToolUse)
-  HOOK_DIR="$HOME/.local/share/cairn"
-  HOOK_FILE="$HOOK_DIR/enforce-cairn.sh"
-  POST_HOOK_FILE="$HOOK_DIR/post-cairn.sh"
-  mkdir -p "$HOOK_DIR"
-  curl -fsSL \
-    -o "$HOOK_FILE" \
-    "https://raw.githubusercontent.com/ValentinFigue/cairn/main/hooks/enforce-cairn.sh"
-  chmod +x "$HOOK_FILE"
-  echo "✓ enforce-cairn hook installed to $HOOK_FILE"
+  if [ "$WITH_HOOK" = true ]; then
+    # Install enforce-cairn hook (PreToolUse)
+    HOOK_DIR="$HOME/.local/share/cairn"
+    HOOK_FILE="$HOOK_DIR/enforce-cairn.sh"
+    POST_HOOK_FILE="$HOOK_DIR/post-cairn.sh"
+    mkdir -p "$HOOK_DIR"
+    curl -fsSL \
+      -o "$HOOK_FILE" \
+      "https://raw.githubusercontent.com/ValentinFigue/cairn/main/hooks/enforce-cairn.sh"
+    chmod +x "$HOOK_FILE"
+    echo "✓ enforce-cairn hook installed to $HOOK_FILE"
 
-  # Install post-cairn hook (PostToolUse)
-  curl -fsSL \
-    -o "$POST_HOOK_FILE" \
-    "https://raw.githubusercontent.com/ValentinFigue/cairn/main/hooks/post-cairn.sh"
-  chmod +x "$POST_HOOK_FILE"
-  echo "✓ post-cairn hook installed to $POST_HOOK_FILE"
+    # Install post-cairn hook (PostToolUse)
+    curl -fsSL \
+      -o "$POST_HOOK_FILE" \
+      "https://raw.githubusercontent.com/ValentinFigue/cairn/main/hooks/post-cairn.sh"
+    chmod +x "$POST_HOOK_FILE"
+    echo "✓ post-cairn hook installed to $POST_HOOK_FILE"
 
-  GLOBAL_SETTINGS="$HOME/.claude/settings.json"
-  if [ ! -f "$GLOBAL_SETTINGS" ]; then
-    printf '{\n  "hooks": {\n    "PreToolUse": [{\n      "matcher": "Bash",\n      "hooks": [{"type": "command", "command": "%s"}]\n    }],\n    "PostToolUse": [{\n      "matcher": "Bash|Write|Edit",\n      "hooks": [{"type": "command", "command": "%s"}]\n    }]\n  }\n}\n' "$HOOK_FILE" "$POST_HOOK_FILE" > "$GLOBAL_SETTINGS"
-    echo "✓ Hooks registered in $GLOBAL_SETTINGS"
-  else
-    if _json_add_hook "$GLOBAL_SETTINGS" "$HOOK_FILE" > "$GLOBAL_SETTINGS.tmp" && mv "$GLOBAL_SETTINGS.tmp" "$GLOBAL_SETTINGS"; then
-      echo "✓ PreToolUse hook registered in $GLOBAL_SETTINGS"
+    GLOBAL_SETTINGS="$HOME/.claude/settings.json"
+    if [ ! -f "$GLOBAL_SETTINGS" ]; then
+      printf '{\n  "hooks": {\n    "PreToolUse": [{\n      "matcher": "Bash",\n      "hooks": [{"type": "command", "command": "%s"}]\n    }],\n    "PostToolUse": [{\n      "matcher": "Bash|Write|Edit",\n      "hooks": [{"type": "command", "command": "%s"}]\n    }]\n  }\n}\n' "$HOOK_FILE" "$POST_HOOK_FILE" > "$GLOBAL_SETTINGS"
+      echo "✓ Hooks registered in $GLOBAL_SETTINGS"
     else
-      echo "  Could not register PreToolUse hook automatically (install python3, node, or jq)."
-      echo "  Add a PreToolUse Bash hook pointing to $HOOK_FILE manually."
-    fi
-    if _json_add_post_hook "$GLOBAL_SETTINGS" "$POST_HOOK_FILE" > "$GLOBAL_SETTINGS.tmp" && mv "$GLOBAL_SETTINGS.tmp" "$GLOBAL_SETTINGS"; then
-      echo "✓ PostToolUse hook registered in $GLOBAL_SETTINGS"
-    else
-      echo "  Could not register PostToolUse hook automatically (install python3, node, or jq)."
-      echo "  Add a PostToolUse Bash|Write|Edit hook pointing to $POST_HOOK_FILE manually."
+      if _json_add_hook "$GLOBAL_SETTINGS" "$HOOK_FILE" > "$GLOBAL_SETTINGS.tmp" && mv "$GLOBAL_SETTINGS.tmp" "$GLOBAL_SETTINGS"; then
+        echo "✓ PreToolUse hook registered in $GLOBAL_SETTINGS"
+      else
+        echo "  Could not register PreToolUse hook automatically (install python3, node, or jq)."
+        echo "  Add a PreToolUse Bash hook pointing to $HOOK_FILE manually."
+      fi
+      if _json_add_post_hook "$GLOBAL_SETTINGS" "$POST_HOOK_FILE" > "$GLOBAL_SETTINGS.tmp" && mv "$GLOBAL_SETTINGS.tmp" "$GLOBAL_SETTINGS"; then
+        echo "✓ PostToolUse hook registered in $GLOBAL_SETTINGS"
+      else
+        echo "  Could not register PostToolUse hook automatically (install python3, node, or jq)."
+        echo "  Add a PostToolUse Bash|Write|Edit hook pointing to $POST_HOOK_FILE manually."
+      fi
     fi
   fi
 fi
@@ -271,4 +278,5 @@ else
   echo "  Global install:             bash install.sh global"
   echo "  With doc rules:             bash install.sh --claude-md"
   echo "  Global + doc rules:         bash install.sh global --claude-md"
+  echo "  Without hooks (aether):     bash install.sh global --no-hook"
 fi

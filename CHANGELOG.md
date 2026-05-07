@@ -6,6 +6,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.3.2] — 2026-05-07
+
+### Added
+
+- `install.sh --no-hook`: skip PreToolUse/PostToolUse hook registration during global install; intended for aether-managed setups where hook lifecycle is handled centrally
+
+### Fixed
+
+- `install.sh --claude-md` no longer double-injects the cairn CLAUDE.md block when aether has already injected it; installer now detects `<!-- aether:start -->` and skips gracefully
+
+---
+
 ## [0.3.1] — 2026-05-07
 
 ### Fixed
